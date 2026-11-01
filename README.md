@@ -234,6 +234,26 @@ Los colores se envían siempre, también cuando rediriges la salida a un archivo
 docker run --rm weather-cli -l es Madrid
 ```
 
+### Atajo: comando `tiempo`
+
+Si usas siempre la misma combinación, puedes automatizarla con una función de zsh. Añade esto a `~/.zshrc` y ejecuta `source ~/.zshrc`:
+
+```zsh
+tiempo() {
+  docker info >/dev/null 2>&1 || {
+    open -a Docker
+    echo "Arrancando Docker..." >&2
+    until docker info >/dev/null 2>&1; do sleep 2; done
+  }
+  docker run -it --rm weather-cli -g -l es -H 12 "${*:-Torredembarra}"
+}
+```
+
+- `tiempo` muestra Torredembarra (cámbialo por tu ciudad habitual).
+- `tiempo Madrid` o `tiempo New York` consultan otra ciudad.
+- Si Docker Desktop no está en marcha, lo arranca y espera a que esté listo (solo macOS, por `open -a`).
+- Solo necesitas haber construido la imagen una vez (`docker build -t weather-cli .`).
+
 ### Casos especiales
 
 | Situación | Resultado |
