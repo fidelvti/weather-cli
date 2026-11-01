@@ -79,7 +79,21 @@ docker run --rm weather-cli "Springfield, Massachusetts"
 docker run --rm weather-cli "Springfield, Illinois"
 ```
 
-La coma es necesaria: `Springfield Massachusetts` sin coma da `City not found`. La salida solo muestra el país (`Springfield, United States`), no la región, así que no verás cuál se eligió; la diferencia se nota en las temperaturas.
+La coma es necesaria: `Springfield Massachusetts` sin coma da `City not found`. La salida muestra la región y el país elegidos (`Springfield, Massachusetts, United States`), así que puedes comprobar que es la ciudad que buscabas.
+
+### Unidades
+
+Por defecto usa unidades métricas (°C, km/h, mm). Con `-u imperial` (o `--units imperial`) usa °F, mph y pulgadas:
+
+```bash
+docker run --rm weather-cli -u imperial "Springfield, Illinois"
+```
+
+Las opciones van **antes del nombre de la ciudad**. Para ver la ayuda:
+
+```bash
+docker run --rm weather-cli --help
+```
 
 ### Ejemplo de salida
 
@@ -93,7 +107,7 @@ Madrid, Spain: 19.0°C (feels like 17.0°C), humidity 38%, wind 4.6 km/h
   ... (hasta completar 7 días)
 ```
 
-- **Primera línea:** ciudad y país encontrados, temperatura, sensación térmica, humedad y viento.
+- **Primera línea:** ciudad, región y país encontrados (la región se omite si coincide con el nombre de la ciudad), temperatura, sensación térmica, humedad y viento.
 - **Segunda línea:** descripción del tiempo actual con su icono.
 - **Previsión:** una línea por día con la descripción, la temperatura mínima / máxima y la lluvia acumulada.
 
@@ -103,7 +117,7 @@ Los valores cambian según el momento de la consulta.
 
 | Situación | Resultado |
 |---|---|
-| Sin argumentos | `Usage: python weather.py <city_name>` |
+| Sin ciudad, o unidades no válidas | Mensaje `usage: ...` de `argparse` con el error |
 | Ciudad no encontrada | `City not found: <ciudad>` |
 | Sin conexión o API caída | Mensaje de error de conexión |
 | Respuesta inesperada de la API | Mensaje de error al leer los datos |
@@ -123,11 +137,11 @@ Activa el entorno cada vez que abras una terminal nueva, y desactívalo con `dea
 
 ## Cómo funciona
 
-1. **Geocodificación:** `get_location()` consulta `https://geocoding-api.open-meteo.com/v1/search` con el nombre de la ciudad y devuelve el primer resultado (nombre, país, latitud y longitud).
-2. **Tiempo y previsión:** `get_weather()` consulta `https://api.open-meteo.com/v1/forecast` en una sola petición con esas coordenadas. Pide el tiempo actual (`temperature_2m`, `apparent_temperature`, `relative_humidity_2m`, `wind_speed_10m`, `weather_code`) y la previsión diaria de 7 días (`weather_code`, `temperature_2m_max`, `temperature_2m_min`, `precipitation_sum`), con `timezone=auto`.
+1. **Geocodificación:** `get_location()` consulta `https://geocoding-api.open-meteo.com/v1/search` con el nombre de la ciudad y devuelve el primer resultado (nombre, región, país, latitud y longitud).
+2. **Tiempo y previsión:** `get_weather()` consulta `https://api.open-meteo.com/v1/forecast` en una sola petición con esas coordenadas. Pide el tiempo actual (`temperature_2m`, `apparent_temperature`, `relative_humidity_2m`, `wind_speed_10m`, `weather_code`) y la previsión diaria de 7 días (`weather_code`, `temperature_2m_max`, `temperature_2m_min`, `precipitation_sum`), con `timezone=auto`. Si usas `-u imperial`, añade `temperature_unit`, `wind_speed_unit` y `precipitation_unit`.
 3. **Descripción:** `describe_weather_code()` traduce el `weather_code` (códigos estándar WMO) a un texto con icono usando el diccionario `WEATHER_CODES`. Si el código es desconocido, muestra `❓ Unknown conditions`.
 4. **Previsión:** `print_forecast()` imprime una línea por día.
-5. **Salida:** `main()` junta los argumentos como nombre de ciudad, llama a las funciones anteriores, imprime el resultado y gestiona los errores.
+5. **Salida:** `parse_args()` (con `argparse`) lee la ciudad y las unidades; `main()` junta las palabras de la ciudad, llama a las funciones anteriores, imprime el resultado y gestiona los errores.
 
 ## Estructura del proyecto
 
@@ -137,23 +151,22 @@ weather-cli/
 ├── requirements.txt   # Dependencias (requests)
 ├── Dockerfile         # Imagen de Docker (python:3.12-slim)
 ├── .dockerignore      # Archivos que no se copian a la imagen
+├── .gitignore
+├── LICENSE            # Licencia MIT
 └── README.md
 ```
 
 ## Limitaciones
 
-- Solo usa el primer resultado de la búsqueda, así que ciudades con nombres repetidos pueden devolver una distinta de la esperada. Por ejemplo, "Londres" se resuelve como Londres (Argentina). El país que se muestra ayuda a detectarlo; para forzar otra ciudad, prueba con el nombre en inglés (`London`) o añade la región (`"Springfield, Massachusetts"`). La región elegida no aparece en la salida.
-- Las unidades son fijas: °C y km/h.
+- Solo usa el primer resultado de la búsqueda, así que ciudades con nombres repetidos pueden devolver una distinta de la esperada. Por ejemplo, "Londres" se resuelve como Londres (Argentina). El país que se muestra ayuda a detectarlo; para forzar otra ciudad, prueba con el nombre en inglés (`London`) o añade la región (`"Springfield, Massachusetts"`).- Solo hay dos sistemas de unidades (métrico e imperial); no se pueden mezclar, por ejemplo °C con mph.
 - La previsión es siempre de 7 días, sin opción para cambiarlo, y solo diaria (no por horas).
 - Los iconos son emojis: su aspecto depende de la fuente de tu terminal.
 
 ## Ideas para ampliar
 
-- Elegir unidades (°F, mph) con una opción de línea de comandos.
-- Mostrar también la región (estado, provincia) y permitir elegir entre varios resultados de la búsqueda.
+- Permitir elegir entre varios resultados de la búsqueda cuando hay ciudades con el mismo nombre.
 - Elegir el número de días de previsión y añadir previsión por horas.
-- Usar `argparse` en lugar de `sys.argv`.
 
 ## Licencia y créditos
 
-Datos meteorológicos de [Open-Meteo](https://open-meteo.com/) (uso no comercial gratuito, consulta sus términos). Proyecto basado en el tutorial de freeCodeCamp enlazado arriba.
+Código bajo licencia [MIT](LICENSE). Datos meteorológicos de [Open-Meteo](https://open-meteo.com/) (uso no comercial gratuito, consulta sus términos). Proyecto basado en el tutorial de freeCodeCamp enlazado arriba.

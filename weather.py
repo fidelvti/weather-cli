@@ -1,10 +1,24 @@
-import sys
+import argparse
 from datetime import datetime
 
 import requests
 
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+
+UNITS = {
+    "metric": {"temp": "°C", "wind": "km/h", "rain": "mm", "api": {}},
+    "imperial": {
+        "temp": "°F",
+        "wind": "mph",
+        "rain": "in",
+        "api": {
+            "temperature_unit": "fahrenheit",
+            "wind_speed_unit": "mph",
+            "precipitation_unit": "inch",
+        },
+    },
+}
 
 
 WEATHER_CODES = {
@@ -52,7 +66,7 @@ def get_location(city):
     return results[0]
 
 
-def get_weather(lat, lon):
+def get_weather(lat, lon, units):
     resp = requests.get(
         FORECAST_URL,
         params={
@@ -62,6 +76,7 @@ def get_weather(lat, lon):
             "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum",
             "forecast_days": 7,
             "timezone": "auto",
+            **UNITS[units]["api"],
         },
         timeout=5,
     )
@@ -70,24 +85,53 @@ def get_weather(lat, lon):
     return data["current"], data["daily"]
 
 
-def print_forecast(daily):
+def format_place(location):
+    parts = [location["name"]]
+    region = location.get("admin1")
+    if region and region != location["name"]:
+        parts.append(region)
+    if location.get("country"):
+        parts.append(location["country"])
+    return ", ".join(parts)
+
+
+def print_forecast(daily, units):
+    u = UNITS[units]
     print()
     print("7-day forecast:")
     for i, day in enumerate(daily["time"]):
         label = datetime.strptime(day, "%Y-%m-%d").strftime("%a %d %b")
         print(
             f"  {label}: {describe_weather_code(daily['weather_code'][i])}, "
-            f"{daily['temperature_2m_min'][i]}°C / {daily['temperature_2m_max'][i]}°C, "
-            f"rain {daily['precipitation_sum'][i]} mm"
+            f"{daily['temperature_2m_min'][i]}{u['temp']} / {daily['temperature_2m_max'][i]}{u['temp']}, "
+            f"rain {daily['precipitation_sum'][i]} {u['rain']}"
         )
 
 
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: python weather.py <city_name>")
-        return
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Show the current weather and a 7-day forecast for a city."
+    )
+    parser.add_argument(
+        "city",
+        nargs="+",
+        help='city name; add the region after a comma to disambiguate, e.g. "Springfield, Massachusetts"',
+    )
+    parser.add_argument(
+        "-u",
+        "--units",
+        choices=sorted(UNITS),
+        default="metric",
+        help="metric (°C, km/h, mm) or imperial (°F, mph, in); default: metric",
+    )
+    return parser.parse_args()
 
-    city = " ".join(sys.argv[1:])
+
+def main():
+    args = parse_args()
+    city = " ".join(args.city)
+    units = args.units
+    u = UNITS[units]
 
     try:
         location = get_location(city)
@@ -95,18 +139,15 @@ def main():
             print(f"City not found: {city}")
             return
 
-        current, daily = get_weather(location["latitude"], location["longitude"])
-        place = location["name"]
-        if location.get("country"):
-            place += f", {location['country']}"
+        current, daily = get_weather(location["latitude"], location["longitude"], units)
         print(
-            f"{place}: {current['temperature_2m']}°C "
-            f"(feels like {current['apparent_temperature']}°C), "
+            f"{format_place(location)}: {current['temperature_2m']}{u['temp']} "
+            f"(feels like {current['apparent_temperature']}{u['temp']}), "
             f"humidity {current['relative_humidity_2m']}%, "
-            f"wind {current['wind_speed_10m']} km/h"
+            f"wind {current['wind_speed_10m']} {u['wind']}"
         )
         print(describe_weather_code(current["weather_code"]))
-        print_forecast(daily)
+        print_forecast(daily, units)
 
     except requests.exceptions.RequestException:
         print("Couldn't connect to the weather service. Check your internet connection and try again.")
