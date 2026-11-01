@@ -57,6 +57,44 @@ Para borrar la imagen y liberar espacio:
 docker rmi weather-cli
 ```
 
+## Referencia rápida de opciones
+
+Sintaxis completa (con todas las opciones a la vez):
+
+```bash
+docker run [-it] --rm weather-cli [-h] [-u {metric,imperial}] [-c] [-H N] <ciudad>
+```
+
+| Opción | Larga | Valor | Por defecto | Qué hace |
+|---|---|---|---|---|
+| `-h` | `--help` | — | — | Muestra la ayuda y sale. |
+| `-u` | `--units` | `metric` o `imperial` | `metric` | Unidades: métrico (°C, km/h, mm) o imperial (°F, mph, in). |
+| `-c` | `--choose` | — | desactivado | Si hay varios lugares con ese nombre, los lista (hasta 10) y te deja elegir uno. **Requiere `-it` en Docker.** |
+| `-H` | `--hours` | `N` (1–48) | desactivado | Añade la previsión de las próximas N horas. |
+| — | — | `<ciudad>` | obligatorio | Nombre de la ciudad; puede llevar espacios. Añade la región tras una coma, entre comillas, para desambiguar: `"Springfield, Massachusetts"`. |
+
+Reglas:
+- Las opciones van **antes** de la ciudad, y se pueden combinar en cualquier orden.
+- `-it` solo es necesario con `-c`; en el resto de casos no hace falta.
+- La previsión de 7 días se muestra siempre.
+
+Ejemplos:
+
+```bash
+docker run --rm weather-cli Madrid                                   # lo básico
+docker run --rm weather-cli "Springfield, Illinois"                  # con región
+docker run --rm weather-cli -u imperial New York                     # en °F, mph
+docker run --rm weather-cli -H 12 Madrid                             # + próximas 12 horas
+docker run -it --rm weather-cli -c Springfield                       # elegir entre varios
+docker run -it --rm weather-cli -c -H 12 -u imperial London          # todo combinado
+```
+
+Para ver esta misma referencia desde la propia app:
+
+```bash
+docker run --rm weather-cli --help
+```
+
 ## Uso
 
 ```bash
