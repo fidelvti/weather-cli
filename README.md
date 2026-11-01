@@ -245,8 +245,33 @@ weather-cli/
 
 ## Ideas para ampliar
 
-- Elegir el número de días de la previsión diaria.
-- Salida en JSON para usar la app desde otros programas.
+**Más datos**
+- Elegir el número de días de la previsión diaria (`--days N`, hasta 16).
+- Viento con dirección y rachas, presión, nubosidad, visibilidad e índice UV.
+- Amanecer y atardecer.
+- Calidad del aire (Open-Meteo tiene una API aparte para eso).
+- Avisos de lluvia: "lloverá en las próximas 3 horas".
+
+**Uso más cómodo**
+- Ciudad por defecto guardada en un archivo de configuración o en una variable de entorno (`WEATHER_CITY`), para ejecutar sin escribirla.
+- Buscar por coordenadas (`--lat`, `--lon`) o por código postal.
+- Guardar una lista de ciudades favoritas y ver varias a la vez.
+- Un alias de shell (`alias tiempo='docker run --rm weather-cli'`) o un script `weather` que oculte el comando de Docker.
+- Un `docker-compose.yml` o un `Makefile` con atajos (`make build`, `make run CITY=Madrid`).
+- Autocompletado de opciones en la terminal.
+
+**Salida**
+- Salida en JSON (`--json`) para usar la app desde otros programas.
+- Colores y una opción `--no-color`.
+- Opción `--lang` para mostrar las descripciones en español u otros idiomas.
+- Gráfico de temperatura por horas en la terminal.
+- Modo compacto de una sola línea, útil para barras de estado.
+
+**Robustez y calidad**
+- Reintentos y caché de resultados durante unos minutos para no repetir peticiones.
+- Tests automáticos con `pytest` (sobre todo `describe_weather_code`, `format_place` y el formato de la salida) y una acción de GitHub que los ejecute.
+- Mensajes de error más específicos: distinguir entre "sin red", "API caída" y "tiempo de espera agotado".
+- Empaquetarlo como comando instalable con `pip` (`pyproject.toml`) y publicar la imagen en un registro de contenedores.
 
 ## Licencia y créditos
 
