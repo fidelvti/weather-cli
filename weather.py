@@ -1,4 +1,5 @@
 import argparse
+import sys
 from datetime import datetime
 
 import requests
@@ -57,32 +58,53 @@ def describe_weather_code(code):
     return WEATHER_CODES.get(code, f"❓ Unknown conditions (code {code})")
 
 
-def get_location(city):
-    resp = requests.get(GEOCODE_URL, params={"name": city, "count": 1}, timeout=5)
+def search_locations(city, count=1):
+    resp = requests.get(GEOCODE_URL, params={"name": city, "count": count}, timeout=5)
     resp.raise_for_status()
-    results = resp.json().get("results")
-    if not results:
-        return None
-    return results[0]
+    return resp.json().get("results") or []
 
 
-def get_weather(lat, lon, units):
-    resp = requests.get(
-        FORECAST_URL,
-        params={
-            "latitude": lat,
-            "longitude": lon,
-            "current": "temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code",
-            "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum",
-            "forecast_days": 7,
-            "timezone": "auto",
-            **UNITS[units]["api"],
-        },
-        timeout=5,
-    )
+def choose_location(results):
+    if len(results) == 1:
+        return results[0]
+
+    print("Several places match:")
+    for i, location in enumerate(results, start=1):
+        population = location.get("population")
+        extra = f" (pop. {population:,})" if population else ""
+        print(f"  {i}. {format_place(location)}{extra}")
+
+    while True:
+        try:
+            answer = input(f"Choose 1-{len(results)} (Enter = 1): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            sys.exit(1)
+        if not answer:
+            return results[0]
+        if answer.isdigit() and 1 <= int(answer) <= len(results):
+            return results[int(answer) - 1]
+        print("Invalid choice.")
+
+
+def get_weather(lat, lon, units, hours=None):
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "current": "temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code",
+        "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum",
+        "forecast_days": 7,
+        "timezone": "auto",
+        **UNITS[units]["api"],
+    }
+    if hours:
+        params["hourly"] = "weather_code,temperature_2m,precipitation_probability"
+        params["forecast_hours"] = hours
+
+    resp = requests.get(FORECAST_URL, params=params, timeout=5)
     resp.raise_for_status()
     data = resp.json()
-    return data["current"], data["daily"]
+    return data["current"], data["daily"], data.get("hourly")
 
 
 def format_place(location):
@@ -108,6 +130,29 @@ def print_forecast(daily, units):
         )
 
 
+def print_hourly(hourly, units):
+    u = UNITS[units]
+    print()
+    print(f"Next {len(hourly['time'])} hours:")
+    for i, hour in enumerate(hourly["time"]):
+        label = datetime.strptime(hour, "%Y-%m-%dT%H:%M").strftime("%a %H:%M")
+        print(
+            f"  {label}: {describe_weather_code(hourly['weather_code'][i])}, "
+            f"{hourly['temperature_2m'][i]}{u['temp']}, "
+            f"rain chance {hourly['precipitation_probability'][i]}%"
+        )
+
+
+def hours_arg(value):
+    try:
+        hours = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a number")
+    if not 1 <= hours <= 48:
+        raise argparse.ArgumentTypeError("must be between 1 and 48")
+    return hours
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Show the current weather and a 7-day forecast for a city."
@@ -124,6 +169,19 @@ def parse_args():
         default="metric",
         help="metric (°C, km/h, mm) or imperial (°F, mph, in); default: metric",
     )
+    parser.add_argument(
+        "-c",
+        "--choose",
+        action="store_true",
+        help="when several places match, list them and choose one (needs an interactive terminal)",
+    )
+    parser.add_argument(
+        "-H",
+        "--hours",
+        type=hours_arg,
+        metavar="N",
+        help="also show an hourly forecast for the next N hours (1-48)",
+    )
     return parser.parse_args()
 
 
@@ -133,13 +191,20 @@ def main():
     units = args.units
     u = UNITS[units]
 
+    if args.choose and not sys.stdin.isatty():
+        print("--choose needs an interactive terminal (with Docker, use: docker run -it --rm ...)")
+        return
+
     try:
-        location = get_location(city)
-        if location is None:
+        results = search_locations(city, count=10 if args.choose else 1)
+        if not results:
             print(f"City not found: {city}")
             return
+        location = choose_location(results) if args.choose else results[0]
 
-        current, daily = get_weather(location["latitude"], location["longitude"], units)
+        current, daily, hourly = get_weather(
+            location["latitude"], location["longitude"], units, args.hours
+        )
         print(
             f"{format_place(location)}: {current['temperature_2m']}{u['temp']} "
             f"(feels like {current['apparent_temperature']}{u['temp']}), "
@@ -147,6 +212,8 @@ def main():
             f"wind {current['wind_speed_10m']} {u['wind']}"
         )
         print(describe_weather_code(current["weather_code"]))
+        if hourly:
+            print_hourly(hourly, units)
         print_forecast(daily, units)
 
     except requests.exceptions.RequestException:

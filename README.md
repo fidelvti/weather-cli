@@ -81,6 +81,40 @@ docker run --rm weather-cli "Springfield, Illinois"
 
 La coma es necesaria: `Springfield Massachusetts` sin coma da `City not found`. La salida muestra la región y el país elegidos (`Springfield, Massachusetts, United States`), así que puedes comprobar que es la ciudad que buscabas.
 
+### Elegir entre varios resultados
+
+Con `-c` (o `--choose`) la app lista hasta 10 lugares que coinciden con el nombre y te deja elegir uno por número (con Enter eliges el primero):
+
+```bash
+docker run -it --rm weather-cli -c Springfield
+```
+
+```
+Several places match:
+  1. Springfield, Missouri, United States (pop. 170,188)
+  2. Springfield, Illinois, United States (pop. 114,394)
+  3. Springfield, Massachusetts, United States (pop. 154,341)
+  ...
+Choose 1-10 (Enter = 1): 3
+```
+
+**Importante:** esta opción es interactiva, así que con Docker necesitas `-it` (`docker run -it --rm ...`). Sin `-it` la app avisa y no hace nada. Sin `-c` sigue usando el primer resultado.
+
+### Previsión por horas
+
+Con `-H N` (o `--hours N`) añade la previsión de las próximas N horas (de 1 a 48), con descripción, temperatura y probabilidad de lluvia. Va después del tiempo actual y antes de la previsión de 7 días:
+
+```bash
+docker run --rm weather-cli -H 6 Madrid
+```
+
+```
+Next 6 hours:
+  Sun 19:00: ☀️ Clear sky, 17.8°C, rain chance 0%
+  Sun 20:00: ☀️ Clear sky, 16.5°C, rain chance 0%
+  ...
+```
+
 ### Unidades
 
 Por defecto usa unidades métricas (°C, km/h, mm). Con `-u imperial` (o `--units imperial`) usa °F, mph y pulgadas:
@@ -89,7 +123,13 @@ Por defecto usa unidades métricas (°C, km/h, mm). Con `-u imperial` (o `--unit
 docker run --rm weather-cli -u imperial "Springfield, Illinois"
 ```
 
-Las opciones van **antes del nombre de la ciudad**. Para ver la ayuda:
+Las opciones se pueden combinar y van **antes del nombre de la ciudad**:
+
+```bash
+docker run -it --rm weather-cli -c -H 12 -u imperial London
+```
+
+Para ver la ayuda:
 
 ```bash
 docker run --rm weather-cli --help
@@ -117,7 +157,9 @@ Los valores cambian según el momento de la consulta.
 
 | Situación | Resultado |
 |---|---|
-| Sin ciudad, o unidades no válidas | Mensaje `usage: ...` de `argparse` con el error |
+| Sin ciudad, unidades no válidas o `-H` fuera de 1–48 | Mensaje `usage: ...` de `argparse` con el error |
+| `-c` sin terminal interactiva (Docker sin `-it`) | Aviso pidiendo usar `docker run -it` |
+| Ctrl+C o Ctrl+D al elegir con `-c` | Sale sin mostrar nada más |
 | Ciudad no encontrada | `City not found: <ciudad>` |
 | Sin conexión o API caída | Mensaje de error de conexión |
 | Respuesta inesperada de la API | Mensaje de error al leer los datos |
@@ -137,10 +179,10 @@ Activa el entorno cada vez que abras una terminal nueva, y desactívalo con `dea
 
 ## Cómo funciona
 
-1. **Geocodificación:** `get_location()` consulta `https://geocoding-api.open-meteo.com/v1/search` con el nombre de la ciudad y devuelve el primer resultado (nombre, región, país, latitud y longitud).
+1. **Geocodificación:** `search_locations()` consulta `https://geocoding-api.open-meteo.com/v1/search` con el nombre de la ciudad (1 resultado, o 10 con `-c`). Cada resultado trae nombre, región, país, población, latitud y longitud. Con `-c`, `choose_location()` muestra la lista y pide un número.
 2. **Tiempo y previsión:** `get_weather()` consulta `https://api.open-meteo.com/v1/forecast` en una sola petición con esas coordenadas. Pide el tiempo actual (`temperature_2m`, `apparent_temperature`, `relative_humidity_2m`, `wind_speed_10m`, `weather_code`) y la previsión diaria de 7 días (`weather_code`, `temperature_2m_max`, `temperature_2m_min`, `precipitation_sum`), con `timezone=auto`. Si usas `-u imperial`, añade `temperature_unit`, `wind_speed_unit` y `precipitation_unit`.
 3. **Descripción:** `describe_weather_code()` traduce el `weather_code` (códigos estándar WMO) a un texto con icono usando el diccionario `WEATHER_CODES`. Si el código es desconocido, muestra `❓ Unknown conditions`.
-4. **Previsión:** `print_forecast()` imprime una línea por día.
+4. **Previsión:** `print_hourly()` (solo con `-H`, usa `forecast_hours`) imprime una línea por hora y `print_forecast()` una línea por día.
 5. **Salida:** `parse_args()` (con `argparse`) lee la ciudad y las unidades; `main()` junta las palabras de la ciudad, llama a las funciones anteriores, imprime el resultado y gestiona los errores.
 
 ## Estructura del proyecto
@@ -159,13 +201,14 @@ weather-cli/
 ## Limitaciones
 
 - Solo usa el primer resultado de la búsqueda, así que ciudades con nombres repetidos pueden devolver una distinta de la esperada. Por ejemplo, "Londres" se resuelve como Londres (Argentina). El país que se muestra ayuda a detectarlo; para forzar otra ciudad, prueba con el nombre en inglés (`London`) o añade la región (`"Springfield, Massachusetts"`).- Solo hay dos sistemas de unidades (métrico e imperial); no se pueden mezclar, por ejemplo °C con mph.
-- La previsión es siempre de 7 días, sin opción para cambiarlo, y solo diaria (no por horas).
+- La previsión diaria es siempre de 7 días, sin opción para cambiarlo. La horaria llega como máximo a 48 horas.
+- Sin `-c`, solo se usa el primer resultado de la búsqueda.
 - Los iconos son emojis: su aspecto depende de la fuente de tu terminal.
 
 ## Ideas para ampliar
 
-- Permitir elegir entre varios resultados de la búsqueda cuando hay ciudades con el mismo nombre.
-- Elegir el número de días de previsión y añadir previsión por horas.
+- Elegir el número de días de la previsión diaria.
+- Salida en JSON para usar la app desde otros programas.
 
 ## Licencia y créditos
 
